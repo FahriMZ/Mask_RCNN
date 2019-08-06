@@ -34,6 +34,14 @@ import datetime
 import numpy as np
 import skimage.draw
 
+import tensorflow as tf
+from keras.backend.tensorflow_backend import set_session
+ 
+config = tf.ConfigProto(log_device_placement=True)
+config.gpu_options.per_process_gpu_memory_fraction = 0.8
+config.gpu_options.allow_growth = True
+set_session(tf.Session(config=config))
+
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
 
@@ -63,7 +71,7 @@ class BalloonConfig(Config):
 
     # We use a GPU with 12GB memory, which can fit two images.
     # Adjust down if you use a smaller GPU.
-    IMAGES_PER_GPU = 2
+    IMAGES_PER_GPU = 1
 
     # Number of classes (including background)
     NUM_CLASSES = 1 + 1  # Background + balloon
@@ -198,6 +206,22 @@ def train(model):
                 epochs=30,
                 layers='heads')
 
+    # Training - Stage 2
+    # Finetune layers from ResNet stage 4 and up
+    print("Training Resnet layer 4+")
+    model.train(dataset_train, dataset_val,
+                learning_rate=config.LEARNING_RATE / 10,
+                epochs=100,
+                layers='4+')
+
+    # Training - Stage 3
+    # Finetune layers from ResNet stage 3 and up
+    print("Training Resnet layer 3+")
+    model.train(dataset_train, dataset_val,
+                learning_rate=config.LEARNING_RATE / 100,
+                epochs=200,
+                layers='all')
+
 
 def color_splash(image, mask):
     """Apply color splash effect.
@@ -247,7 +271,7 @@ def detect_and_color_splash(model, image_path=None, video_path=None):
         file_name = "splash_{:%Y%m%dT%H%M%S}.avi".format(datetime.datetime.now())
         vwriter = cv2.VideoWriter(file_name,
                                   cv2.VideoWriter_fourcc(*'MJPG'),
-                                  fps, (width, height))
+                                  30, (width, height))
 
         count = 0
         success = True
